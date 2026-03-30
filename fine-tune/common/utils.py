@@ -406,9 +406,28 @@ def calculate_rouge(
 
 
 def calculate_smatch(test_path, predictions_path) -> dict:
-    with Path(predictions_path).open() as p, Path(test_path).open() as g:
-        score = next(smatch.score_amr_pairs(p, g))
-    return {"smatch": score[2]}
+    """
+    Compute Smatch F1 over ALL AMR pairs in test_path vs predictions_path.
+    The original code used next() which only read the FIRST pair — fixed to
+    consume the entire generator so the cumulative F-score is returned.
+    """
+    try:
+        score = None
+        with Path(predictions_path).open() as p, Path(test_path).open() as g:
+            for score in smatch.score_amr_pairs(p, g):
+                pass   # consume all pairs; score holds cumulative P/R/F
+        if score is None:
+            print("[calculate_smatch] WARNING: no AMR pairs were scored (empty files?)")
+            return {"smatch": 0.0}
+        return {"smatch": score[2]}
+    except FileNotFoundError as e:
+        print(f"[calculate_smatch] ERROR – gold file not found: {e}")
+        return {"smatch": 0.0}
+    except Exception as e:
+        import traceback
+        print(f"[calculate_smatch] ERROR – {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return {"smatch": 0.0}
 
 
 def smart_emb_init_sim(tokenizer, model):

@@ -339,17 +339,26 @@ def main():
                 gp.metadata = metadata
                 idx += 1
         
-        # print("Before Penman Encoding")
-        pieces = [penman.encode(g[0]) for g in graphs]
+        # Encode AMR graphs, replacing failed/empty '()' with a valid dummy
+        DUMMY_AMR = '(z / amr-empty)'
+        pieces = []
+        for g in graphs:
+            try:
+                encoded = penman.encode(g[0])
+                # Penman encodes failed decode as '()' — replace with dummy
+                pieces.append(encoded if encoded.strip() not in ('()', '') else DUMMY_AMR)
+            except Exception:
+                pieces.append(DUMMY_AMR)
+        
         output_prediction_file = f"{training_args.output_dir}/val_outputs/{prefix}_generated_predictions_{global_step}.txt"
-        # write predictions and targets for later rouge evaluation.
         with open(output_prediction_file, "w") as p_writer:
             p_writer.write("\n\n".join(pieces))
         try:
             smatch_score = calculate_smatch(
                 data_args.data_dir + f"/{prefix}-gold.amr", output_prediction_file
             )
-        except:
+        except Exception as _smatch_err:
+            logger.warning(f"Smatch evaluation failed: {_smatch_err}")
             smatch_score = {"smatch": 0.0}
             
         result = {"smatch":smatch_score["smatch"]}
