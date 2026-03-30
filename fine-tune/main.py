@@ -409,8 +409,9 @@ def main():
     es_callback = EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping)
     training_args.max_target_length = data_args.max_target_length
     
+    from grpo_trainer import GRPOTrainer
     compute_metrics = compute_metrics_generation if training_args.task == "amr2text" else compute_metrics_parsing
-    trainer = Seq2SeqTrainer(
+    trainer = GRPOTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
@@ -419,6 +420,10 @@ def main():
         data_collator=data_collator,
         callbacks=[es_callback],
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
+        do_rl=data_args.do_rl,
+        rl_group_size=data_args.rl_group_size,
+        rl_alpha=data_args.rl_alpha,
+        custom_tokenizer=tokenizer,
     )
 
     # Training

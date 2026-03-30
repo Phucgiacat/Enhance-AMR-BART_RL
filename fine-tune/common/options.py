@@ -56,6 +56,19 @@ class ModelArguments:
         },
     )
 
+    do_rl: bool = field(
+        default=False,
+        metadata={"help": "Whether to perform GRPO reinforcement learning"},
+    )
+    rl_group_size: int = field(
+        default=4,
+        metadata={"help": "The number of sampled outputs per input for GRPO"},
+    )
+    rl_alpha: float = field(
+        default=0.5,
+        metadata={"help": "The alpha weight for CE loss vs RL loss"},
+    )
+
 
 @dataclass
 class DataTrainingArguments:
