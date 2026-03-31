@@ -146,6 +146,8 @@ def main():
     )
 
     model.resize_token_embeddings(len(tokenizer))
+    if training_args.gradient_checkpointing:
+        model.config.use_cache = False
 
     # config dec_start_token, max_pos_embeddings
     if model.config.decoder_start_token_id is None and isinstance(
