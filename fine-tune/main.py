@@ -420,10 +420,10 @@ def main():
         data_collator=data_collator,
         callbacks=[es_callback],
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
-        do_rl=data_args.do_rl,
-        rl_group_size=data_args.rl_group_size,
-        rl_alpha=data_args.rl_alpha,
-        rl_warmup_epochs=data_args.rl_warmup_epochs,
+        do_rl=model_args.do_rl,
+        rl_group_size=model_args.rl_group_size,
+        rl_alpha=model_args.rl_alpha,
+        rl_warmup_epochs=model_args.rl_warmup_epochs,
         custom_tokenizer=tokenizer,
     )
 
