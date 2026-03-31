@@ -20,9 +20,10 @@ class GRPOTrainer(Seq2SeqTrainer):
         
     def compute_loss(self, model, inputs, return_outputs=False):
         # ---- 1. Tính cấu phần Cross Entropy Loss (Supervised SFT) ----
-        labels = inputs.pop("labels")
-        outputs = model(**inputs, labels=labels)
-        ce_loss = outputs.loss
+        # Extract labels before calling super (because super().compute_loss pops it)
+        labels = inputs.get("labels").clone()
+        # Gọi thủ tục loss của bản thân base Seq2SeqTrainer để lấy CE_loss đã được fix loss dilution
+        ce_loss, outputs = super().compute_loss(model, inputs, return_outputs=True)
         
         # Cờ an toàn, nếu config không bật RL thì chỉ trả về SFT loss như bình thường
         if not self.do_rl:
