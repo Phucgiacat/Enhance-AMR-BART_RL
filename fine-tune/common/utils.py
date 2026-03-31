@@ -408,18 +408,26 @@ def calculate_rouge(
 def calculate_smatch(test_path, predictions_path) -> dict:
     """
     Compute Smatch F1 over ALL AMR pairs in test_path vs predictions_path.
-    The original code used next() which only read the FIRST pair — fixed to
-    consume the entire generator so the cumulative F-score is returned.
     """
     try:
-        score = None
+        match_tot, test_tot, gold_tot = 0, 0, 0
         with Path(predictions_path).open() as p, Path(test_path).open() as g:
-            for score in smatch.score_amr_pairs(p, g):
-                pass   # consume all pairs; score holds cumulative P/R/F
-        if score is None:
+            for match_num, test_num, gold_num in smatch.score_amr_pairs(p, g):
+                match_tot += match_num
+                test_tot += test_num
+                gold_tot += gold_num
+        
+        if test_tot == 0 or gold_tot == 0:
             print("[calculate_smatch] WARNING: no AMR pairs were scored (empty files?)")
             return {"smatch": 0.0}
-        return {"smatch": score[2]}
+            
+        p = float(match_tot) / float(test_tot)
+        r = float(match_tot) / float(gold_tot)
+        f_score = 0.0
+        if p + r > 0:
+            f_score = 2 * (p * r) / (p + r)
+            
+        return {"smatch": f_score}
     except FileNotFoundError as e:
         print(f"[calculate_smatch] ERROR – gold file not found: {e}")
         return {"smatch": 0.0}

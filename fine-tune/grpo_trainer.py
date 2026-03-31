@@ -7,13 +7,16 @@ class GRPOTrainer(Seq2SeqTrainer):
     """
     Kế thừa HF Seq2SeqTrainer để tính toán objective loss GRPO.
     """
-    def __init__(self, *args, do_rl=False, rl_group_size=4, rl_alpha=0.5, custom_tokenizer=None, **kwargs):
+    def __init__(self, *args, do_rl=False, rl_group_size=4, rl_alpha=0.5, rl_warmup_epochs=5, custom_tokenizer=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.do_rl = do_rl
         self.rl_group_size = rl_group_size
         # rl_alpha: Trọng số của Supervised Fine-Tuning. VD: 0.5 nghĩa là L = 0.5*CE + 0.5*RL
-        self.rl_alpha = rl_alpha 
+        self.rl_alpha = rl_alpha
+        # rl_warmup_epochs: Số epoch chỉ train SFT thuần trước khi bật RL
+        self.rl_warmup_epochs = rl_warmup_epochs
         self.custom_tokenizer = custom_tokenizer
+        self._rl_activated_logged = False
         
     def compute_loss(self, model, inputs, return_outputs=False):
         # ---- 1. Tính cấu phần Cross Entropy Loss (Supervised SFT) ----
@@ -24,6 +27,16 @@ class GRPOTrainer(Seq2SeqTrainer):
         # Cờ an toàn, nếu config không bật RL thì chỉ trả về SFT loss như bình thường
         if not self.do_rl:
             return (ce_loss, outputs) if return_outputs else ce_loss
+
+        # SFT Warm-up: chỉ train CE thuần trong N epoch đầu
+        current_epoch = self.state.epoch if self.state else 0
+        if current_epoch < self.rl_warmup_epochs:
+            return (ce_loss, outputs) if return_outputs else ce_loss
+        
+        # Log khi RL bắt đầu kích hoạt (chỉ 1 lần)
+        if not self._rl_activated_logged:
+            print(f"\n🚀 GRPO RL activated at epoch {current_epoch:.1f} (warm-up = {self.rl_warmup_epochs} epochs)")
+            self._rl_activated_logged = True
 
         # ---- 2. Tính cấu phần Reinforcement Learning Loss (GRPO) ----
         input_ids = inputs["input_ids"]

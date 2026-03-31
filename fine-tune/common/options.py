@@ -68,6 +68,10 @@ class ModelArguments:
         default=0.5,
         metadata={"help": "The alpha weight for CE loss vs RL loss"},
     )
+    rl_warmup_epochs: int = field(
+        default=5,
+        metadata={"help": "Number of SFT-only warm-up epochs before enabling GRPO RL"},
+    )
 
 
 @dataclass

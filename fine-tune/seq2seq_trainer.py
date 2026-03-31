@@ -152,14 +152,17 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
         pad_mask = target.eq(ignore_index)
         nll_loss.masked_fill_(pad_mask, 0.0)
         smooth_loss.masked_fill_(pad_mask, 0.0)
+        # Chia cho số token THẬT (non-padding) thay vì tổng số token
+        # Tránh loss bị pha loãng khi batch lớn có nhiều padding
+        count = (~pad_mask).sum().clamp(min=1)
+        nll_loss = nll_loss.sum() / count
+        smooth_loss = smooth_loss.sum() / count
     else:
         nll_loss = nll_loss.squeeze(-1)
         smooth_loss = smooth_loss.squeeze(-1)
+        nll_loss = nll_loss.mean()
+        smooth_loss = smooth_loss.mean()
 
-    # nll_loss = nll_loss.sum()                   # mean()? Scared to break other math.
-    # smooth_loss = smooth_loss.sum()
-    nll_loss = nll_loss.mean()  # mean()? Scared to break other math.
-    smooth_loss = smooth_loss.mean()
     eps_i = epsilon / lprobs.size(-1)
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
     return loss, nll_loss

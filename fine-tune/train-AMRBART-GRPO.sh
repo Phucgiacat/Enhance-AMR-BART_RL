@@ -90,6 +90,7 @@ python -u main.py \
     --do_rl True \
     --rl_group_size 4 \
     --rl_alpha 0.5 \
+    --rl_warmup_epochs 5 \
     --ddp_find_unused_parameters False \
     --report_to "tensorboard" \
     --dataloader_pin_memory True 2>&1 | tee $OutputDir/run.log

@@ -160,7 +160,7 @@ class AMRBartTokenizer(BartTokenizer):
                 else:
                     nodes_.append(n)
             else:
-                nodes_.append(n)
+                nodes_.append(str(n))
         nodes = nodes_
 
         if True:

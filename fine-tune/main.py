@@ -423,6 +423,7 @@ def main():
         do_rl=data_args.do_rl,
         rl_group_size=data_args.rl_group_size,
         rl_alpha=data_args.rl_alpha,
+        rl_warmup_epochs=data_args.rl_warmup_epochs,
         custom_tokenizer=tokenizer,
     )
 
@@ -435,7 +436,7 @@ def main():
             checkpoint = last_checkpoint
         
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        # trainer.save_model()  # Saves the tokenizer too for easy upload
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
         max_train_samples = (
