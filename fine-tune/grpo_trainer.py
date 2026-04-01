@@ -17,6 +17,8 @@ class GRPOTrainer(Seq2SeqTrainer):
         self.rl_warmup_epochs = rl_warmup_epochs
         self.custom_tokenizer = custom_tokenizer
         self._rl_activated_logged = False
+        # Lưu lại num_beams gốc để khôi phục khi GRPO bắt đầu
+        self._original_num_beams = None
         
     def compute_loss(self, model, inputs, return_outputs=False):
         # ---- 1. Tính cấu phần Cross Entropy Loss (Supervised SFT) ----
@@ -131,3 +133,27 @@ class GRPOTrainer(Seq2SeqTrainer):
             self.log({"ce_loss": ce_loss.item(), "rl_loss": rl_loss.item(), "reward_mean": rewards_tensor.mean().item()})
 
         return (total_loss, outputs) if return_outputs else total_loss
+
+    def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval", **gen_kwargs):
+        """
+        Override evaluate để tự động dùng num_beams=1 (Greedy) trong SFT warm-up
+        và khôi phục num_beams đầy đủ khi GRPO bắt đầu.
+        Eval với num_beams=1 nhanh hơn ~5x so với Beam Search num_beams=5.
+        """
+        current_epoch = self.state.epoch if self.state else 0
+        in_warmup = self.do_rl and (current_epoch < self.rl_warmup_epochs)
+
+        if in_warmup:
+            # Lưu lại giá trị beam gốc và tạm thời ép về 1
+            if self._original_num_beams is None:
+                self._original_num_beams = self.args.generation_num_beams
+            self.args.generation_num_beams = 1
+            print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: dùng num_beams=1 (Greedy) để tăng tốc eval")
+        else:
+            # Khôi phục beam search đầy đủ khi sang phase GRPO
+            if self._original_num_beams is not None:
+                self.args.generation_num_beams = self._original_num_beams
+                self._original_num_beams = None
+                print(f"\n[Eval] GRPO phase: khôi phục num_beams={self.args.generation_num_beams}")
+
+        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, **gen_kwargs)
