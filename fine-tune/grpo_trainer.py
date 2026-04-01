@@ -136,53 +136,37 @@ class GRPOTrainer(Seq2SeqTrainer):
 
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval", **gen_kwargs):
         """
-        Override evaluate để tự động tăng tốc eval trong SFT warm-up:
-          - num_beams=1  (Greedy thay vì Beam Search)
-          - generation_max_length=256 (thay vì 1024)
-          - Chỉ eval 200 mẫu đại diện thay vì toàn bộ val set
+        Override evaluate để tăng tốc eval trong SFT warm-up:
+          - num_beams=1  (Greedy thay vì Beam Search, nhanh hơn ~5x)
+          - generation_max_length=256 (thay vì 1024, nhanh hơn ~4x)
+          → Tổng ~20x nhanh hơn mà vẫn chạy toàn bộ val set
         Khi GRPO bắt đầu → khôi phục toàn bộ cấu hình gốc để eval chính thức.
         """
         current_epoch = self.state.epoch if self.state else 0
         in_warmup = self.do_rl and (current_epoch < self.rl_warmup_epochs)
 
-        # Lưu cấu hình gốc nếu chưa lưu
+        # Lưu cấu hình gốc lần đầu tiên
         if self._original_num_beams is None:
             self._original_num_beams = self.args.generation_num_beams
-        
-        # Lưu max_length gốc
         if not hasattr(self, '_original_max_length'):
             self._original_max_length = self.args.generation_max_length or 1024
 
         if in_warmup:
             # === CHẾ ĐỘ NHANH: SFT Warmup ===
             self.args.generation_num_beams = 1
-            self.args.generation_max_length = 256   # Giảm max token sinh ra
-
-            # Chỉ lấy 200 mẫu đại diện để eval nhanh
-            _eval_dataset = eval_dataset or self.eval_dataset
-            if _eval_dataset is not None and len(_eval_dataset) > 200:
-                import random
-                indices = random.sample(range(len(_eval_dataset)), 200)
-                _eval_dataset = _eval_dataset.select(indices)
-            
-            n_samples = len(_eval_dataset) if _eval_dataset else "N/A"
+            self.args.generation_max_length = 256
             print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: "
-                  f"Greedy(beams=1) + max_len=256 + {n_samples} mẫu → ~2-3 phút")
-
-            result = super().evaluate(
-                _eval_dataset, ignore_keys=ignore_keys,
-                metric_key_prefix=metric_key_prefix, **gen_kwargs
-            )
+                  f"Greedy(beams=1) + max_len=256 → ~20-30 phút (toàn bộ val set)")
         else:
             # === CHẾ ĐỘ ĐẦY ĐỦ: GRPO Phase ===
             self.args.generation_num_beams = self._original_num_beams
             self.args.generation_max_length = self._original_max_length
-            print(f"\n[Eval] GRPO phase: Full eval với beams={self._original_num_beams}, max_len={self._original_max_length}")
-            
-            result = super().evaluate(
-                eval_dataset, ignore_keys=ignore_keys,
-                metric_key_prefix=metric_key_prefix, **gen_kwargs
-            )
+            print(f"\n[Eval] GRPO phase: Full eval với beams={self._original_num_beams}, "
+                  f"max_len={self._original_max_length}")
 
-        return result
+        return super().evaluate(
+            eval_dataset, ignore_keys=ignore_keys,
+            metric_key_prefix=metric_key_prefix, **gen_kwargs
+        )
+
 
