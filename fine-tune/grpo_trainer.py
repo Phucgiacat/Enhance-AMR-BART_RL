@@ -56,6 +56,7 @@ class GRPOTrainer(Seq2SeqTrainer):
                 input_ids=input_ids,
                 max_length=self.args.generation_max_length if self.args.generation_max_length else 1024,
                 num_return_sequences=self.rl_group_size,  # Generate G sequences per input
+                num_beams=1, # BẮT BUỘC: Ép bằng 1 để dùng chuẩn Multinomial Sampling thay vì Beam Sampling (gây lỗi nan)
                 do_sample=True,
                 temperature=0.8, # Temperature khuyến nghị từ paper
                 pad_token_id=self.custom_tokenizer.pad_token_id,
