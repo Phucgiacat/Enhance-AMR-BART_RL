@@ -136,24 +136,53 @@ class GRPOTrainer(Seq2SeqTrainer):
 
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval", **gen_kwargs):
         """
-        Override evaluate để tự động dùng num_beams=1 (Greedy) trong SFT warm-up
-        và khôi phục num_beams đầy đủ khi GRPO bắt đầu.
-        Eval với num_beams=1 nhanh hơn ~5x so với Beam Search num_beams=5.
+        Override evaluate để tự động tăng tốc eval trong SFT warm-up:
+          - num_beams=1  (Greedy thay vì Beam Search)
+          - generation_max_length=256 (thay vì 1024)
+          - Chỉ eval 200 mẫu đại diện thay vì toàn bộ val set
+        Khi GRPO bắt đầu → khôi phục toàn bộ cấu hình gốc để eval chính thức.
         """
         current_epoch = self.state.epoch if self.state else 0
         in_warmup = self.do_rl and (current_epoch < self.rl_warmup_epochs)
 
-        if in_warmup:
-            # Lưu lại giá trị beam gốc và tạm thời ép về 1
-            if self._original_num_beams is None:
-                self._original_num_beams = self.args.generation_num_beams
-            self.args.generation_num_beams = 1
-            print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: dùng num_beams=1 (Greedy) để tăng tốc eval")
-        else:
-            # Khôi phục beam search đầy đủ khi sang phase GRPO
-            if self._original_num_beams is not None:
-                self.args.generation_num_beams = self._original_num_beams
-                self._original_num_beams = None
-                print(f"\n[Eval] GRPO phase: khôi phục num_beams={self.args.generation_num_beams}")
+        # Lưu cấu hình gốc nếu chưa lưu
+        if self._original_num_beams is None:
+            self._original_num_beams = self.args.generation_num_beams
+        
+        # Lưu max_length gốc
+        if not hasattr(self, '_original_max_length'):
+            self._original_max_length = self.args.generation_max_length or 1024
 
-        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, **gen_kwargs)
+        if in_warmup:
+            # === CHẾ ĐỘ NHANH: SFT Warmup ===
+            self.args.generation_num_beams = 1
+            self.args.generation_max_length = 256   # Giảm max token sinh ra
+
+            # Chỉ lấy 200 mẫu đại diện để eval nhanh
+            _eval_dataset = eval_dataset or self.eval_dataset
+            if _eval_dataset is not None and len(_eval_dataset) > 200:
+                import random
+                indices = random.sample(range(len(_eval_dataset)), 200)
+                _eval_dataset = _eval_dataset.select(indices)
+            
+            n_samples = len(_eval_dataset) if _eval_dataset else "N/A"
+            print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: "
+                  f"Greedy(beams=1) + max_len=256 + {n_samples} mẫu → ~2-3 phút")
+
+            result = super().evaluate(
+                _eval_dataset, ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix, **gen_kwargs
+            )
+        else:
+            # === CHẾ ĐỘ ĐẦY ĐỦ: GRPO Phase ===
+            self.args.generation_num_beams = self._original_num_beams
+            self.args.generation_max_length = self._original_max_length
+            print(f"\n[Eval] GRPO phase: Full eval với beams={self._original_num_beams}, max_len={self._original_max_length}")
+            
+            result = super().evaluate(
+                eval_dataset, ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix, **gen_kwargs
+            )
+
+        return result
+
