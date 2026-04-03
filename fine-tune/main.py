@@ -359,10 +359,23 @@ def main():
         output_prediction_file = f"{training_args.output_dir}/val_outputs/{prefix}_generated_predictions_{global_step}.txt"
         with open(output_prediction_file, "w") as p_writer:
             p_writer.write("\n\n".join(pieces))
+            
         try:
-            smatch_score = calculate_smatch(
-                data_args.data_dir + f"/{prefix}-gold.amr", output_prediction_file
-            )
+            # Sửa lỗi lệch dòng: Decode trực tiếp nhãn gold từ batch thay vì lấy tệp gốc trên ổ cứng
+            if labels is not None:
+                from grpo_trainer import ids_to_amr_strings
+                gold_ids = np.where(labels != -100, labels, tokenizer.pad_token_id)
+                gold_pieces = ids_to_amr_strings(torch.tensor(gold_ids), tokenizer)
+                
+                output_gold_file = f"{training_args.output_dir}/val_outputs/{prefix}_gold_aligned_{global_step}.txt"
+                with open(output_gold_file, "w") as g_writer:
+                    g_writer.write("\n\n".join(gold_pieces))
+                
+                smatch_score = calculate_smatch(
+                    output_gold_file, output_prediction_file
+                )
+            else:
+                smatch_score = {"smatch": 0.0}
         except Exception as _smatch_err:
             logger.warning(f"Smatch evaluation failed: {_smatch_err}")
             smatch_score = {"smatch": 0.0}
