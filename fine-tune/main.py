@@ -305,12 +305,16 @@ def main():
         for idx in range(len(preds)):
             graphs_same_source = []
             graphs.append(graphs_same_source)
-            ith_pred = preds[idx]
-            ith_pred[0] = tokenizer.bos_token_id
-            ith_pred = [
-                tokenizer.eos_token_id if itm == tokenizer.amr_eos_token_id else itm
-                for itm in ith_pred if itm != tokenizer.pad_token_id
-            ]
+            ith_pred_raw = preds[idx]
+            ith_pred_raw[0] = tokenizer.bos_token_id
+            ith_pred = []
+            for itm in ith_pred_raw:
+                if itm == tokenizer.pad_token_id:
+                    continue
+                mapped_itm = tokenizer.eos_token_id if itm == tokenizer.amr_eos_token_id else itm
+                ith_pred.append(mapped_itm)
+                if mapped_itm == tokenizer.eos_token_id:
+                    break
             
             graph, status, (lin, backr) = tokenizer.decode_amr(
                 ith_pred, restore_name_ops=False
