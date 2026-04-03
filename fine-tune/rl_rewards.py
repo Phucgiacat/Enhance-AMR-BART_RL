@@ -28,6 +28,10 @@ def validate_amr_structure(amr_str: str):
     - AND-OR logic (Toán tử op1, op2.. phải liên tiếp)
     """
     try:
+        # Fallback dummy graphs given by `ids_to_amr_strings` when parsing crashed should receive zero structural rewards.
+        if amr_str.strip() == '(z / amr-empty)':
+            return 0.0, 0.0, 0.0
+        
         # Nếu Decode được bằng Penman -> Reward Parsability = 1
         graph = penman.decode(amr_str + " ") # pad to avoid parse error at end
         parsability = 1.0
