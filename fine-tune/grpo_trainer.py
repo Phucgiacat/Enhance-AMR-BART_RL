@@ -161,11 +161,7 @@ class GRPOTrainer(Seq2SeqTrainer):
 
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval", **gen_kwargs):
         """
-        Override evaluate để tăng tốc eval trong SFT warm-up:
-          - num_beams=1  (Greedy thay vì Beam Search, nhanh hơn ~5x)
-          - generation_max_length=256 (thay vì 1024, nhanh hơn ~4x)
-          → Tổng ~20x nhanh hơn mà vẫn chạy toàn bộ val set
-        Khi GRPO bắt đầu → khôi phục toàn bộ cấu hình gốc để eval chính thức.
+        Override evaluate. User yêu cầu dùng full hyperparameter (beams, max_length) ngay cả trong lúc SFT warm-up.
         """
         current_epoch = self.state.epoch if self.state else 0
         in_warmup = self.do_rl and (current_epoch < self.rl_warmup_epochs)
@@ -176,16 +172,14 @@ class GRPOTrainer(Seq2SeqTrainer):
         if not hasattr(self, '_original_max_length'):
             self._original_max_length = self.args.generation_max_length or 1024
 
+        # Luôn sử dụng cấu hình eval gốc do user thiết lập
+        self.args.generation_num_beams = self._original_num_beams
+        self.args.generation_max_length = self._original_max_length
+
         if in_warmup:
-            # === CHẾ ĐỘ NHANH: SFT Warmup ===
-            self.args.generation_num_beams = 1
-            self.args.generation_max_length = 256
             print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: "
-                  f"Greedy(beams=1) + max_len=256 → ~20-30 phút (toàn bộ val set)")
+                  f"Full eval với beams={self._original_num_beams}, max_len={self._original_max_length}")
         else:
-            # === CHẾ ĐỘ ĐẦY ĐỦ: GRPO Phase ===
-            self.args.generation_num_beams = self._original_num_beams
-            self.args.generation_max_length = self._original_max_length
             print(f"\n[Eval] GRPO phase: Full eval với beams={self._original_num_beams}, "
                   f"max_len={self._original_max_length}")
 
