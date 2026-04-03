@@ -132,26 +132,28 @@ class GRPOTrainer(Seq2SeqTrainer):
         else:
             attention_mask_repeated = None
 
-        # Mô phỏng Auto-regressive offset (dịch phải 1 step để feed vào Decoder)
-        decoder_input_ids = torch.cat([
-            torch.full((sample_outputs.size(0), 1), self.custom_tokenizer.amr_bos_token_id, device=device),
-            sample_outputs[:, :-1]
-        ], dim=1)
+        # Sử dụng chính sample_outputs (trừ token cuối) làm input, và target là nhích sang phải 1 (trừ token đầu)
+        # Điều này tái lập hoàn hảo xác suất auto-regressive lúc mô hình vừa generate
+        decoder_input_ids = sample_outputs[:, :-1]
+        targets = sample_outputs[:, 1:]
         
         rl_outputs = model(
             input_ids=input_ids_repeated,
             attention_mask=attention_mask_repeated,
             decoder_input_ids=decoder_input_ids
         )
-        logits = rl_outputs.logits # [batch_size * G, seq_len, vocab_size]
+        logits = rl_outputs.logits # [batch_size * G, seq_len-1, vocab_size]
         
         # Tính Probability phân phối token và Extract log xác suất đúng của token thực tế được pick
         log_probs = torch.log_softmax(logits, dim=-1)
-        token_log_probs = log_probs.gather(2, sample_outputs.unsqueeze(-1)).squeeze(-1) # shape: [B*G, seq_len]
+        token_log_probs = log_probs.gather(2, targets.unsqueeze(-1)).squeeze(-1) # shape: [B*G, seq_len-1]
         
-        # Không tính loss cho phần Padding token
-        padding_mask = (sample_outputs != self.custom_tokenizer.pad_token_id).float()
-        seq_log_probs = (token_log_probs * padding_mask).sum(dim=1) # Gom toàn thể prob của chuỗi, shape [B*G]
+        # Lọc bỏ nhiễu: Không tính gradient tối ưu cho các token rác ở đầu chuỗi (như PAD, BOS)
+        bos_id = self.custom_tokenizer.bos_token_id
+        amr_bos_id = self.custom_tokenizer.amr_bos_token_id if hasattr(self.custom_tokenizer, 'amr_bos_token_id') else bos_id
+        
+        valid_mask = (targets != self.custom_tokenizer.pad_token_id) & (targets != bos_id) & (targets != amr_bos_id)
+        seq_log_probs = (token_log_probs * valid_mask.float()).sum(dim=1) # Gom toàn thể prob của chuỗi, shape [B*G]
         
         # Ghi nhận policy gradient equation (dấu trừ vì là Loss cần Gradient Descent tối thiểu hóa)
         rl_loss = -(advantages * seq_log_probs).mean()
