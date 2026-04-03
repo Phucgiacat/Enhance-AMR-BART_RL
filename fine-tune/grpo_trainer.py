@@ -79,9 +79,11 @@ class GRPOTrainer(Seq2SeqTrainer):
         # BƯỚC 2A. Sinh dữ liệu nhóm (Group Sampling)
         # Sử dụng torch.no_grad() để giải phóng biểu đồ tính toán (graph memory) khi text generation
         with torch.no_grad():
+            # Capping max length để chống hiện tượng 1 đồ thị babble kéo dài vòng lặp
+            safe_max_len = min(self.args.generation_max_length or 1024, 400)
             sample_outputs = model.generate(
                 input_ids=input_ids,
-                max_length=self.args.generation_max_length if self.args.generation_max_length else 1024,
+                max_length=safe_max_len,
                 num_return_sequences=self.rl_group_size,  # Generate G sequences per input
                 num_beams=1, # BẮT BUỘC: Ép bằng 1 để dùng chuẩn Multinomial Sampling thay vì Beam Sampling (gây lỗi nan)
                 do_sample=True,
