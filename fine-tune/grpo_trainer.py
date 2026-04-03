@@ -172,14 +172,14 @@ class GRPOTrainer(Seq2SeqTrainer):
         if not hasattr(self, '_original_max_length'):
             self._original_max_length = self.args.generation_max_length or 1024
 
-        # Luôn sử dụng cấu hình eval gốc do user thiết lập
-        self.args.generation_num_beams = self._original_num_beams
-        self.args.generation_max_length = self._original_max_length
-
         if in_warmup:
+            self.args.generation_num_beams = 3
+            self.args.generation_max_length = 256
             print(f"\n[Eval] SFT warm-up epoch {current_epoch:.1f}: "
-                  f"Full eval với beams={self._original_num_beams}, max_len={self._original_max_length}")
+                  f"Medium eval với beams=3, max_len=256")
         else:
+            self.args.generation_num_beams = self._original_num_beams
+            self.args.generation_max_length = self._original_max_length
             print(f"\n[Eval] GRPO phase: Full eval với beams={self._original_num_beams}, "
                   f"max_len={self._original_max_length}")
 
