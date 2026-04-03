@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import Seq2SeqTrainer
+from seq2seq_trainer import Seq2SeqTrainer
 from rl_rewards import compute_grpo_rewards
 import penman
 
@@ -87,7 +87,7 @@ class GRPOTrainer(Seq2SeqTrainer):
                 do_sample=True,
                 temperature=0.8, # Temperature khuyến nghị từ paper
                 pad_token_id=self.custom_tokenizer.pad_token_id,
-                eos_token_id=self.custom_tokenizer.eos_token_id,
+                eos_token_id=self.custom_tokenizer.amr_eos_token_id if hasattr(self.custom_tokenizer, 'amr_eos_token_id') else self.custom_tokenizer.eos_token_id,
                 decoder_start_token_id=self.custom_tokenizer.amr_bos_token_id,
                  # Có thể tắt forced_bos_token_id nếu config gây lỗi
             )
