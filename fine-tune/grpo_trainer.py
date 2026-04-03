@@ -2,6 +2,31 @@ import torch
 import torch.nn as nn
 from transformers import Seq2SeqTrainer
 from rl_rewards import compute_grpo_rewards
+import penman
+
+def ids_to_amr_strings(token_ids_tensor, tokenizer):
+    amr_strs = []
+    DUMMY_AMR = '(z / amr-empty)'
+    token_ids_list = token_ids_tensor.tolist()
+    for ith_pred_raw in token_ids_list:
+        if len(ith_pred_raw) > 0:
+            ith_pred_raw[0] = tokenizer.bos_token_id
+            
+        ith_pred = []
+        for itm in ith_pred_raw:
+            if itm == tokenizer.pad_token_id:
+                continue
+            mapped_itm = tokenizer.eos_token_id if itm == tokenizer.amr_eos_token_id else itm
+            ith_pred.append(mapped_itm)
+            if mapped_itm == tokenizer.eos_token_id:
+                break
+        try:
+            graph, status, _ = tokenizer.decode_amr(ith_pred, restore_name_ops=False)
+            encoded = penman.encode(graph)
+            amr_strs.append(encoded if encoded.strip() not in ('()', '') else DUMMY_AMR)
+        except Exception:
+            amr_strs.append(DUMMY_AMR)
+    return amr_strs
 
 class GRPOTrainer(Seq2SeqTrainer):
     """
@@ -49,7 +74,7 @@ class GRPOTrainer(Seq2SeqTrainer):
         # Decode labels (bỏ qua id = -100 là padding trong seq2seq) để lấy Text Gold đo Smatch
         gold_ids = labels.clone()
         gold_ids[gold_ids == -100] = self.custom_tokenizer.pad_token_id
-        gold_strs = self.custom_tokenizer.batch_decode(gold_ids, skip_special_tokens=True)
+        gold_strs = ids_to_amr_strings(gold_ids, self.custom_tokenizer)
         
         # BƯỚC 2A. Sinh dữ liệu nhóm (Group Sampling)
         # Sử dụng torch.no_grad() để giải phóng biểu đồ tính toán (graph memory) khi text generation
@@ -69,7 +94,7 @@ class GRPOTrainer(Seq2SeqTrainer):
             # Shape của sample_outputs: [batch_size * G, seq_len]
         
         # BƯỚC 2B. Đo đạc Reward Matrix 
-        pred_strs = self.custom_tokenizer.batch_decode(sample_outputs, skip_special_tokens=True)
+        pred_strs = ids_to_amr_strings(sample_outputs, self.custom_tokenizer)
         
         # Duplicate mảng Gold Text G lần để mapping 1-1 với mảng Prediction Text
         gold_strs_repeated = []
