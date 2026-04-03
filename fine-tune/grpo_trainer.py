@@ -9,17 +9,22 @@ def ids_to_amr_strings(token_ids_tensor, tokenizer):
     DUMMY_AMR = '(z / amr-empty)'
     token_ids_list = token_ids_tensor.tolist()
     for ith_pred_raw in token_ids_list:
-        if len(ith_pred_raw) > 0:
-            ith_pred_raw[0] = tokenizer.bos_token_id
-            
         ith_pred = []
         for itm in ith_pred_raw:
             if itm == tokenizer.pad_token_id:
                 continue
-            mapped_itm = tokenizer.eos_token_id if itm == tokenizer.amr_eos_token_id else itm
-            ith_pred.append(mapped_itm)
+            if hasattr(tokenizer, 'amr_bos_token_id') and itm == tokenizer.amr_bos_token_id:
+                continue
+                
+            mapped_itm = tokenizer.eos_token_id if (hasattr(tokenizer, 'amr_eos_token_id') and itm == tokenizer.amr_eos_token_id) else itm
             if mapped_itm == tokenizer.eos_token_id:
                 break
+                
+            ith_pred.append(mapped_itm)
+            
+        # tokenizer.decode_amr expects seq to start with normal BOS
+        ith_pred = [tokenizer.bos_token_id] + ith_pred
+        
         try:
             graph, status, _ = tokenizer.decode_amr(ith_pred, restore_name_ops=False)
             encoded = penman.encode(graph)
