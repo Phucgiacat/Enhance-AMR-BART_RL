@@ -410,24 +410,19 @@ def calculate_smatch(test_path, predictions_path) -> dict:
     Compute Smatch F1 over ALL AMR pairs in test_path vs predictions_path.
     """
     try:
-        match_tot, test_tot, gold_tot = 0, 0, 0
+        f_scores = []
         with Path(predictions_path).open() as p, Path(test_path).open() as g:
-            for match_num, test_num, gold_num in smatch.score_amr_pairs(p, g):
-                match_tot += match_num
-                test_tot += test_num
-                gold_tot += gold_num
+            for score in smatch.score_amr_pairs(p, g):
+                # score is a tuple of (Precision, Recall, F-score)
+                if score and len(score) >= 3:
+                    f_scores.append(score[2])
         
-        if test_tot == 0 or gold_tot == 0:
+        if len(f_scores) == 0:
             print("[calculate_smatch] WARNING: no AMR pairs were scored (empty files?)")
             return {"smatch": 0.0}
             
-        p = float(match_tot) / float(test_tot)
-        r = float(match_tot) / float(gold_tot)
-        f_score = 0.0
-        if p + r > 0:
-            f_score = 2 * (p * r) / (p + r)
-            
-        return {"smatch": f_score}
+        mean_f_score = sum(f_scores) / len(f_scores)
+        return {"smatch": mean_f_score}
     except FileNotFoundError as e:
         print(f"[calculate_smatch] ERROR – gold file not found: {e}")
         return {"smatch": 0.0}
