@@ -12,7 +12,7 @@ def ids_to_amr_strings(token_ids_tensor, tokenizer):
         ith_pred = []
         for itm in ith_pred_raw:
             if itm == tokenizer.pad_token_id:
-                continue
+                break  # PAD = kết thúc chuỗi thực sự, dừng lại (không skip)
             if hasattr(tokenizer, 'amr_bos_token_id') and itm == tokenizer.amr_bos_token_id:
                 continue
                 
