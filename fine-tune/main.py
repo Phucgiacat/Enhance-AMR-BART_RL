@@ -310,7 +310,7 @@ def main():
             ith_pred = []
             for itm in ith_pred_raw:
                 if itm == tokenizer.pad_token_id:
-                    continue
+                    break  # PAD = end of sequence, must stop here
                 mapped_itm = tokenizer.eos_token_id if itm == tokenizer.amr_eos_token_id else itm
                 ith_pred.append(mapped_itm)
                 if mapped_itm == tokenizer.eos_token_id:
@@ -367,8 +367,9 @@ def main():
                 gold_ids = np.where(labels != -100, labels, tokenizer.pad_token_id)
                 gold_pieces = ids_to_amr_strings(torch.tensor(gold_ids), tokenizer)
                 
-                output_gold_file = f"{training_args.output_dir}/val_outputs/{prefix}_gold_aligned_{global_step}.txt"
-                with open(output_gold_file, "w") as g_writer:
+                # Reuse 1 fixed gold file (không tích lũy file theo global_step)
+                output_gold_file = f"{training_args.output_dir}/val_outputs/{prefix}_gold_aligned.txt"
+                with open(output_gold_file, "w", encoding="utf-8") as g_writer:
                     g_writer.write("\n\n".join(gold_pieces))
                 
                 smatch_score = calculate_smatch(

@@ -2,6 +2,7 @@ import sys
 import penman
 import re
 from io import StringIO
+from concurrent.futures import ThreadPoolExecutor
 import smatch
 
 def compute_smatch_reward(pred_amr_str: str, gold_amr_str: str) -> float:
@@ -93,26 +94,23 @@ def validate_amr_structure(amr_str: str):
     
     return parsability, frame_reward, and_or_reward
 
+def _compute_single_reward(args):
+    p, g = args
+    r_smatch = compute_smatch_reward(p, g)
+    r_parse, r_frame, r_andor = validate_amr_structure(p)
+    total = (r_smatch + r_parse + r_frame + r_andor) / 4.0
+    detail = {'smatch2': r_smatch, 'parse': r_parse, 'frame': r_frame, 'andor': r_andor}
+    return total, detail
+
 def compute_grpo_rewards(pred_strs, gold_strs):
     """
-    Tính mức thưởng GRPO cho một batch kết quả. 
-    Lưu ý pred_strs và gold_strs là list string đã decode từ token ids.
+    Tính mức thưởng GRPO cho một batch kết quả.
+    Dùng ThreadPoolExecutor để chạy song song Smatch scoring giữa các sample.
     """
-    rewards = []
-    details = []
-    for p, g in zip(pred_strs, gold_strs):
-        r_smatch = compute_smatch_reward(p, g)
-        r_parse, r_frame, r_andor = validate_amr_structure(p)
-        
-        # Tổng hợp 4 hàm toán học chia trung bình (Trọng số đều)
-        total = (r_smatch + r_parse + r_frame + r_andor) / 4.0
-        rewards.append(total)
-        
-        details.append({
-            'smatch2': r_smatch, 
-            'parse': r_parse, 
-            'frame': r_frame, 
-            'andor': r_andor
-        })
-        
+    pairs = list(zip(pred_strs, gold_strs))
+    # Worker = 4 dù batch nhỏ; tăng nếu batch_size*G lớn hơn
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(_compute_single_reward, pairs))
+    rewards = [r for r, _ in results]
+    details = [d for _, d in results]
     return rewards, details
