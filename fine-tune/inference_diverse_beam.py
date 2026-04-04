@@ -75,22 +75,25 @@ def decode_to_amr(token_ids: list, tokenizer) -> str:
 # Dynamic min_length estimation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def compute_min_length(sentence: str, ratio: float = 1.5, floor: int = 15) -> int:
+def compute_min_length(sentence: str, ratio: float = 3.5, floor: int = 30) -> int:
     """
     Ước tính min_length cho AMR output dựa trên độ dài câu đầu vào.
 
-    Lý luận:
-      - AMR graph phải encode ít nhất root concept + các edge quan trọng
-      - Câu càng dài → graph càng sâu → min_length càng lớn
-      - Thực nghiệm Vietnamese AMR: output tokens ≈ 1.5× số từ đầu vào
-      - floor=15: tối thiểu 15 tokens ngay cả câu rất ngắn
+    Lưu ý quan trọng về AMR tokens:
+      - 1 từ tiếng Việt → có thể 1-3 AMR subword tokens
+      - ':mode', ':ARG0', '<pointer:N>' mỗi cái là 1 token đặc biệt
+      - Thin graph '(z1/X :mode amr-unknown)' ≈ 12-18 tokens trong AMRBartTokenizer
+      → ratio=3.5, floor=30 để chắc chắn vượt qua thin graph
 
-    Examples:
-      "lắng_nghe!"          → 1 word  → max(15, 1×1.5) = 15 tokens
-      "Hãy lắng_nghe ta"   → 3 words → max(15, 3×1.5) = 15 tokens
-      "Hãy cùng lắng_nghe bài hát..." → 8 words → max(15, 8×1.5) = 12 → 15 tokens
-      "Chính_phủ Việt_Nam phê_duyệt dự_án..." → 15 words → max(15, 15×1.5) = 23 tokens
-      Câu phức 25 từ → max(15, 25×1.5) = 38 tokens
+    Calibration (9 từ test case):
+      "Hãy cùng lắng_nghe bài hát mà Coca-Cola đã tạo ra"
+      → 9 words × 3.5 = 31.5 → max(30, 31) = 31 tokens  ✅ > thin graph (12-18)
+
+    Scale theo câu dài:
+      5  từ → max(30, 17 ) = 30  tokens
+      10 từ → max(30, 35 ) = 35  tokens
+      15 từ → max(30, 52 ) = 52  tokens
+      25 từ → max(30, 87 ) = 87  tokens
     """
     n_words = len(sentence.split())
     return max(floor, int(n_words * ratio))
