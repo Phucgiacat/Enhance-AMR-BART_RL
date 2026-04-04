@@ -43,8 +43,27 @@ from transformers import AutoTokenizer
 # Helper: Decode token IDs → AMR string (tái sử dụng logic từ main.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def remove_amr_unknown_mode(graph) -> "penman.Graph":
+    """
+    Post-process: xóa edge ':mode amr-unknown' khỏi graph.
+    Lý do: model tại epoch sớm sinh `:mode amr-unknown` như fallback.
+    Thay vì reject toàn bộ graph, ta giữ phần còn lại.
+    """
+    keep = [
+        triple for triple in graph.triples
+        if not (triple.role == ':mode' and str(triple.target) == 'amr-unknown')
+    ]
+    if len(keep) == len(graph.triples):
+        return graph  # không cần sửa
+
+    if len(keep) == 0:
+        return graph  # tránh graph rỗng
+
+    return penman.Graph(keep)
+
+
 def decode_to_amr(token_ids: list, tokenizer) -> str:
-    """Decode token IDs thành Penman AMR string."""
+    """Decode token IDs → Penman AMR string, có post-process xóa :mode amr-unknown."""
     DUMMY = '(z / amr-empty)'
     seq = list(token_ids)
     if not seq:
@@ -65,6 +84,11 @@ def decode_to_amr(token_ids: list, tokenizer) -> str:
 
     try:
         graph, status, _ = tokenizer.decode_amr(clean, restore_name_ops=False)
+
+        # ── Post-process: xóa :mode amr-unknown ─────────────────────────────
+        graph = remove_amr_unknown_mode(graph)
+        # ────────────────────────────────────────────────────────────────────
+
         encoded = penman.encode(graph)
         return encoded if encoded.strip() not in ('()', '') else DUMMY
     except Exception:
