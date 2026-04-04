@@ -188,19 +188,16 @@ def main():
     print(f"Loading model from: {args.model_path}")
     print(f"Device: {args.device}")
 
-    from transformers import MBartForConditionalGeneration
-    from spring_amr.tokenization_bart import AMRBartTokenizer
+    from transformers import BartForConditionalGeneration
+    from model_interface.tokenization_bart import AMRBartTokenizer
 
-    # Load tokenizer theo đúng pattern AMRBART (giống main.py)
-    base_model = "facebook/bart-large"
+    # Load tokenizer — giống hệt main.py
     tokenizer = AMRBartTokenizer.from_pretrained(
-        base_model,
-        collapse_name_ops=False,
-        use_pointer_tokens=True,
-        raw_graph=False,
+        args.model_path,
+        use_fast=False,
     )
 
-    model = MBartForConditionalGeneration.from_pretrained(args.model_path)
+    model = BartForConditionalGeneration.from_pretrained(args.model_path)
     model.eval()
 
     # ── Collect sentences ───────────────────────────────────────────────────
