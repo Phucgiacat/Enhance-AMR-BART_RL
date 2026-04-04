@@ -155,7 +155,11 @@ class GRPOTrainer(Seq2SeqTrainer):
         amr_bos_id = self.custom_tokenizer.amr_bos_token_id if hasattr(self.custom_tokenizer, 'amr_bos_token_id') else bos_id
         
         valid_mask = (targets != self.custom_tokenizer.pad_token_id) & (targets != bos_id) & (targets != amr_bos_id)
-        seq_log_probs = (token_log_probs * valid_mask.float()).sum(dim=1) # Gom toàn thể prob của chuỗi, shape [B*G]
+        # MEAN thay vì SUM để rl_loss không bị khuếch đại theo độ dài chuỗi
+        # SUM: chuỗi 100 token × logprob=-3.0 → seq_log_prob=-300 → rl_loss dao động hàng trăm
+        # MEAN: seq_log_prob=-3.0 → rl_loss dao động trong khoảng [-5, 5] (ổn định hơn nhiều)
+        valid_len = valid_mask.float().sum(dim=1).clamp(min=1)
+        seq_log_probs = (token_log_probs * valid_mask.float()).sum(dim=1) / valid_len  # shape [B*G]
         
         # Ghi nhận policy gradient equation (dấu trừ vì là Loss cần Gradient Descent tối thiểu hóa)
         rl_loss = -(advantages * seq_log_probs).mean()
