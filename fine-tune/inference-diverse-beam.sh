@@ -45,20 +45,18 @@ if [ -z "$CHECKPOINT" ]; then
 fi
 
 # ── Input mode ────────────────────────────────────────────────────────────────
+MODE="file"
 if [ "$2" = "--sentence" ]; then
-    # Single sentence mode
+    MODE="sentence"
     SENTENCE="$3"
     if [ -z "$SENTENCE" ]; then
         echo "ERROR: --sentence requires text argument"
         exit 1
     fi
-    INPUT_ARGS="--sentence \"$SENTENCE\""
 else
-    # File mode
     INPUT_FILE=${2:-"sentences.txt"}
     OUTPUT_FILE=${3:-"${RootDir}/outputs/parsed_amr_diverse_beam.txt"}
     mkdir -p "$(dirname $OUTPUT_FILE)"
-    INPUT_ARGS="--input_file $INPUT_FILE --output_file $OUTPUT_FILE"
 fi
 
 # ── Diverse Beam Search Parameters ───────────────────────────────────────────
@@ -73,6 +71,7 @@ echo "============================================================"
 echo " AMRBART Inference — Diverse Beam Search"
 echo "============================================================"
 echo " Checkpoint:       $CHECKPOINT"
+echo " Mode:             $MODE"
 echo " num_beams:        $NUM_BEAMS"
 echo " num_beam_groups:  $NUM_BEAM_GROUPS"
 echo " diversity_penalty:$DIVERSITY_PENALTY"
@@ -80,23 +79,35 @@ echo " max_new_tokens:   $MAX_NEW_TOKENS"
 echo " batch_size:       $BATCH_SIZE"
 echo "============================================================"
 
-python -u $RootDir/inference_diverse_beam.py \
-    --model_path $CHECKPOINT \
-    $INPUT_ARGS \
-    --num_beams $NUM_BEAMS \
-    --num_beam_groups $NUM_BEAM_GROUPS \
-    --diversity_penalty $DIVERSITY_PENALTY \
-    --max_new_tokens $MAX_NEW_TOKENS \
-    --batch_size $BATCH_SIZE \
-    --device cuda
+# Gọi Python trực tiếp — tách 2 case để tránh word-split với câu có spaces
+if [ "$MODE" = "sentence" ]; then
+    python -u "$RootDir/inference_diverse_beam.py" \
+        --model_path "$CHECKPOINT" \
+        --sentence "$SENTENCE" \
+        --num_beams "$NUM_BEAMS" \
+        --num_beam_groups "$NUM_BEAM_GROUPS" \
+        --diversity_penalty "$DIVERSITY_PENALTY" \
+        --max_new_tokens "$MAX_NEW_TOKENS" \
+        --batch_size "$BATCH_SIZE" \
+        --device cuda
+else
+    python -u "$RootDir/inference_diverse_beam.py" \
+        --model_path "$CHECKPOINT" \
+        --input_file "$INPUT_FILE" \
+        --output_file "$OUTPUT_FILE" \
+        --num_beams "$NUM_BEAMS" \
+        --num_beam_groups "$NUM_BEAM_GROUPS" \
+        --diversity_penalty "$DIVERSITY_PENALTY" \
+        --max_new_tokens "$MAX_NEW_TOKENS" \
+        --batch_size "$BATCH_SIZE" \
+        --device cuda
+fi
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
     echo ""
     echo "✅ Inference hoàn tất!"
-    if [ -n "$OUTPUT_FILE" ]; then
-        echo "   Output: $OUTPUT_FILE"
-    fi
+    [ -n "$OUTPUT_FILE" ] && echo "   Output: $OUTPUT_FILE"
 else
     echo "❌ Inference thất bại (exit code: $EXIT_CODE)"
 fi
