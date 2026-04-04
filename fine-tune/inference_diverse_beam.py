@@ -72,6 +72,31 @@ def decode_to_amr(token_ids: list, tokenizer) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Dynamic min_length estimation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_min_length(sentence: str, ratio: float = 1.5, floor: int = 15) -> int:
+    """
+    Ước tính min_length cho AMR output dựa trên độ dài câu đầu vào.
+
+    Lý luận:
+      - AMR graph phải encode ít nhất root concept + các edge quan trọng
+      - Câu càng dài → graph càng sâu → min_length càng lớn
+      - Thực nghiệm Vietnamese AMR: output tokens ≈ 1.5× số từ đầu vào
+      - floor=15: tối thiểu 15 tokens ngay cả câu rất ngắn
+
+    Examples:
+      "lắng_nghe!"          → 1 word  → max(15, 1×1.5) = 15 tokens
+      "Hãy lắng_nghe ta"   → 3 words → max(15, 3×1.5) = 15 tokens
+      "Hãy cùng lắng_nghe bài hát..." → 8 words → max(15, 8×1.5) = 12 → 15 tokens
+      "Chính_phủ Việt_Nam phê_duyệt dự_án..." → 15 words → max(15, 15×1.5) = 23 tokens
+      Câu phức 25 từ → max(15, 25×1.5) = 38 tokens
+    """
+    n_words = len(sentence.split())
+    return max(floor, int(n_words * ratio))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Core inference function
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -83,18 +108,17 @@ def parse_sentences(
     num_beam_groups: int = 5,
     diversity_penalty: float = 0.8,
     max_new_tokens: int = 400,
+    min_length_ratio: float = 1.5,   # ← dynamic min_length ratio (words × ratio)
+    min_length_floor: int = 15,       # ← minimum tokens bất kể câu ngắn cỡ nào
     batch_size: int = 4,
     device: str = "cuda",
 ) -> List[str]:
     """
     Parse danh sách câu → AMR graphs dùng Diverse Beam Search.
 
-    Args:
-        num_beams:         Tổng số beams (phải chia hết cho num_beam_groups)
-        num_beam_groups:   Số nhóm beams — mỗi nhóm explore hướng khác
-        diversity_penalty: Càng cao → các nhóm càng đa dạng (0.5-1.5)
-        max_new_tokens:    Độ dài tối đa output
-        batch_size:        Số câu xử lý một lúc (giảm nếu OOM)
+    min_length được tính động per batch:
+        min_length = max(floor, min_words_in_batch × ratio)
+    Lấy min của batch để đảm bảo an toàn cho câu ngắn nhất.
     """
     assert num_beams % num_beam_groups == 0, (
         f"num_beams ({num_beams}) phải chia hết cho num_beam_groups ({num_beam_groups})"
@@ -106,6 +130,14 @@ def parse_sentences(
 
     for i in tqdm(range(0, len(sentences), batch_size), desc="Parsing"):
         batch_sents = sentences[i: i + batch_size]
+
+        # ── Tính dynamic min_length cho batch này ────────────────────────────
+        # Lấy min của batch → an toàn cho câu ngắn nhất trong batch
+        batch_min_lengths = [
+            compute_min_length(s, ratio=min_length_ratio, floor=min_length_floor)
+            for s in batch_sents
+        ]
+        dynamic_min = min(batch_min_lengths)
 
         # Tokenize
         inputs = tokenizer(
@@ -125,8 +157,8 @@ def parse_sentences(
                 num_beams=num_beams,
                 num_beam_groups=num_beam_groups,
                 diversity_penalty=diversity_penalty,
-                # ── Chống thin graph (tương thích transformers 4.21) ─────
-                min_length=30,  # min_new_tokens chỉ có từ 4.25 → dùng min_length
+                # ── Dynamic min_length per batch ─────────────────────────
+                min_length=dynamic_min,
                 # ────────────────────────────────────────────────────────
 
                 max_new_tokens=max_new_tokens,
