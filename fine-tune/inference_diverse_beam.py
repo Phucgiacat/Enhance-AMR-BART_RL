@@ -125,6 +125,8 @@ def parse_sentences(
                 num_beams=num_beams,
                 num_beam_groups=num_beam_groups,
                 diversity_penalty=diversity_penalty,
+                # ── Chống thin graph: bắt buộc sinh ít nhất 30 tokens ────
+                min_new_tokens=30,
                 # ────────────────────────────────────────────────────────
 
                 max_new_tokens=max_new_tokens,
