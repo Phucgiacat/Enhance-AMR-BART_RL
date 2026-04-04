@@ -63,11 +63,11 @@ def validate_amr_structure(amr_str: str):
         edges = node_edges.get(src, [])
         
         # 1. Khung Argument Logic (Frame-Argument Correctness)
-        if isinstance(concept, str) and re.match(r'.+-\d\d$', concept):
+        # Bất kỳ Node nào có phát tia :ARGx thì bản chất nó đóng vai trò Predicate (Bất chấp tiếng Việt có đuôi -01, -91 hay không)
+        args = [int(r[4:]) for r in edges if r.startswith(':ARG') and r[4:].isdigit()]
+        if len(args) > 0:
             total_frames += 1
-            # Lọc các tham số bắt đầu bằng :ARG
-            args = [int(r[4:]) for r in edges if r.startswith(':ARG') and r[4:].isdigit()]
-            # Giả định: Hầu hết PropBank frames chỉ hỗ trợ :ARG0 đến :ARG5
+            # Giả định: Các tham số luận điểm hợp lệ thường mằm trong khung :ARG0 đến :ARG5
             if any(a > 5 for a in args):
                 pass
             else:
