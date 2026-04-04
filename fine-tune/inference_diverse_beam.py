@@ -131,6 +131,17 @@ def parse_sentences(
     model.to(device)
     results = []
 
+    # ── Ban 'amr-unknown' để buộc model sinh graph thực sự ───────────────────
+    # amr-unknown là fallback token — ban nó buộc model chọn structure thay thế
+    bad_words_ids = None
+    try:
+        unk_ids = tokenizer.encode("amr-unknown", add_special_tokens=False)
+        if unk_ids:
+            bad_words_ids = [unk_ids]  # format: list of list of token ids
+            print(f"Banning token: 'amr-unknown' = {unk_ids}")
+    except Exception:
+        pass
+
     for i in tqdm(range(0, len(sentences), batch_size), desc="Parsing"):
         batch_sents = sentences[i: i + batch_size]
 
@@ -162,6 +173,8 @@ def parse_sentences(
                 diversity_penalty=diversity_penalty,
                 # ── Dynamic min_length per batch ─────────────────────────
                 min_length=dynamic_min,
+                # ── Ban 'amr-unknown' hoàn toàn ──────────────────────────
+                bad_words_ids=bad_words_ids,
                 # ────────────────────────────────────────────────────────
 
                 max_new_tokens=max_new_tokens,
