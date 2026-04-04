@@ -24,16 +24,19 @@ Usage:
 ─────────────────────────────────────────────────────────────────────────────
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys
 import torch
 import penman
+from typing import List
 from tqdm import tqdm
 
 # ─── Đảm bảo import đúng từ thư mục fine-tune ────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoTokenizer
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,14 +78,14 @@ def decode_to_amr(token_ids: list, tokenizer) -> str:
 def parse_sentences(
     model,
     tokenizer,
-    sentences: list[str],
+    sentences: List[str],
     num_beams: int = 10,
     num_beam_groups: int = 5,
     diversity_penalty: float = 0.8,
     max_new_tokens: int = 400,
     batch_size: int = 4,
     device: str = "cuda",
-) -> list[str]:
+) -> List[str]:
     """
     Parse danh sách câu → AMR graphs dùng Diverse Beam Search.
 
@@ -186,13 +189,16 @@ def main():
     print(f"Device: {args.device}")
 
     from transformers import MBartForConditionalGeneration
-    # Import tokenizer AMR-specific
-    try:
-        from data_interface.dataset import AMRParsingDataset
-        tokenizer = AMRParsingDataset.build_tokenizer(args.model_path)
-    except Exception:
-        # Fallback: dùng AutoTokenizer nếu có
-        tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    from spring_amr.tokenization_bart import AMRBartTokenizer
+
+    # Load tokenizer theo đúng pattern AMRBART (giống main.py)
+    base_model = "facebook/bart-large"
+    tokenizer = AMRBartTokenizer.from_pretrained(
+        base_model,
+        collapse_name_ops=False,
+        use_pointer_tokens=True,
+        raw_graph=False,
+    )
 
     model = MBartForConditionalGeneration.from_pretrained(args.model_path)
     model.eval()
