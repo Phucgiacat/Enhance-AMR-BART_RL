@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import os
+import shutil
 import re
 import sys
 from textwrap import indent
@@ -428,7 +429,38 @@ def main():
     
     es_callback = EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping)
     training_args.max_target_length = data_args.max_target_length
-    
+
+    # ===========================================================================
+    # SaveToDriveCallback: Copy checkpoint về Drive sau mỗi lần save
+    # Đảm bảo training luôn ghi vào /content/ local – tránh phụ thuộc FUSE Drive
+    # ===========================================================================
+    from transformers import TrainerCallback
+
+    class SaveToDriveCallback(TrainerCallback):
+        """Copy đầu ra training vào đường dẫn Drive sau mỗi lần Trainer lưu checkpoint."""
+        def __init__(self, drive_dir: str):
+            self.drive_dir = drive_dir
+
+        def on_save(self, args, state, control, **kwargs):
+            src = args.output_dir
+            if self.drive_dir and self.drive_dir != src:
+                try:
+                    os.makedirs(self.drive_dir, exist_ok=True)
+                    shutil.copytree(src, self.drive_dir, dirs_exist_ok=True)
+                    print(f"\u2705 [SaveToDriveCallback] Đã copy checkpoint về Drive: {self.drive_dir}")
+                except Exception as e:
+                    print(f"[WARNING] SaveToDriveCallback: Copy thất bại ({e}) - bỏ qua, training tiếp tục.")
+            return control
+
+    # Đường dẫn Drive (set None nếu chạy local, không phải Colab)
+    # Giá trị này được đọc từ biến môi trường DRIVE_OUTPUT_DIR để linh hoạt
+    drive_output_dir = os.environ.get("DRIVE_OUTPUT_DIR", None)
+    extra_callbacks = [es_callback]
+    if drive_output_dir:
+        extra_callbacks.append(SaveToDriveCallback(drive_output_dir))
+        print(f"ℹ️  SaveToDriveCallback enabled: checkpoint sẽ cóp về {drive_output_dir}")
+    else:
+        print("ℹ️  SaveToDriveCallback disabled (DRIVE_OUTPUT_DIR not set)")
     from grpo_trainer import GRPOTrainer
     compute_metrics = compute_metrics_generation if training_args.task == "amr2text" else compute_metrics_parsing
     trainer = GRPOTrainer(
@@ -438,7 +470,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        callbacks=[es_callback],
+        callbacks=extra_callbacks,
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
         do_rl=model_args.do_rl,
         rl_group_size=model_args.rl_group_size,

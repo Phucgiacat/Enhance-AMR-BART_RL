@@ -15,7 +15,20 @@ DataCache=$DataPath/.cache/dump-amrparsing
 
 lr=1e-5
 
-OutputDir=${RootDir}/outputs/$Dataset-${ModelCate}-AMRParing-bsz16-lr-${lr}-UnifiedInp
+# ============================================================
+# Khi chạy trên Google Colab:
+#   - LOCAL_OUTPUT_DIR: Ghi checkpoint vào ổ dựa local (/content/)
+#     => Tránh phụ thuộc FUSE Drive, không bị FileNotFoundError
+#   - DRIVE_OUTPUT_DIR: Sau mỗi lần save, SaveToDriveCallback sẽ
+#     tự động copy checkpoint từ LOCAL về Drive này
+# ============================================================
+LOCAL_OUTPUT_DIR="/content/output_grpo/AMRBART-GRPO"
+DRIVE_OUTPUT_DIR="/content/drive/MyDrive/output_grpo/AMRBART-GRPO"
+
+# Để SaveToDriveCallback trong main.py biết nơi cần copy
+export DRIVE_OUTPUT_DIR=$DRIVE_OUTPUT_DIR
+
+OutputDir=$LOCAL_OUTPUT_DIR
 
 if [ ! -d ${OutputDir} ];then
   mkdir -p ${OutputDir}
@@ -92,5 +105,5 @@ python -u main.py \
     --rl_alpha 0.5 \
     --rl_warmup_epochs 5 \
     --ddp_find_unused_parameters False \
-    --report_to "tensorboard" \
+    --report_to "none" \
     --dataloader_pin_memory True 2>&1 | tee $OutputDir/run.log

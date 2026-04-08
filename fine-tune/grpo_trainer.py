@@ -169,8 +169,13 @@ class GRPOTrainer(Seq2SeqTrainer):
         total_loss = self.rl_alpha * ce_loss + (1.0 - self.rl_alpha) * rl_loss
         
         # (Tuỳ chọn) Đẩy loss gốc lên logs của HF
+        # Bọc try/except để tránh crash khi TensorBoard mất kết nối Drive (Google Colab)
         if hasattr(self, "log"):
-            self.log({"ce_loss": ce_loss.item(), "rl_loss": rl_loss.item(), "reward_mean": rewards_tensor.mean().item()})
+            try:
+                self.log({"ce_loss": ce_loss.item(), "rl_loss": rl_loss.item(), "reward_mean": rewards_tensor.mean().item()})
+            except Exception as _log_err:
+                # Chỉ in cảnh báo, không raise để không dừng training
+                print(f"[WARNING] self.log() failed (TensorBoard/Drive issue?): {_log_err}")
 
         return (total_loss, outputs) if return_outputs else total_loss
 
